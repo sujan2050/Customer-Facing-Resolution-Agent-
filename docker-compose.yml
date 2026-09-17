@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: skyroute_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-resolution_agent_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d resolution_agent_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skyroute_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/resolution_agent_db
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - LLM_MODEL=${LLM_MODEL:-gemini-2.5-flash}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - MOCK_LLM=${MOCK_LLM:-false}
+      - BACKEND_PORT=8000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: skyroute_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
