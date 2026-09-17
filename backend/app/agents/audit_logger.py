@@ -103,6 +103,34 @@ def format_customer_response(state: Dict[str, Any]) -> str:
             f"Since the ₹{fare_diff:,.0f} difference exceeds my authorization threshold, I have escalated this rebooking request "
             "to our supervisory team to review a fare waiver."
         )
+    elif fare_diff and fare_diff <= 1500:
+        paragraphs.append(
+            f"Regarding moving you to an alternate flight with a ₹{fare_diff:,.0f} fare difference: "
+            f"this amount is within our authorized ₹1,500 agent waiver threshold under the Fare Difference Rule."
+        )
+
+    # Refund request to a different payment method
+    if entities.get("refund_payment_method") == "different":
+        paragraphs.append(
+            "Regarding your request to process a refund to a different bank account or card: "
+            "under SkyRoute's Refund Processing Rule, refunds can strictly be issued to the original payment method only. "
+            "Processing refunds to an alternate payment method or account is prohibited under agent authority. "
+            "Because we cannot process this change directly, this request has been escalated to our specialist team for review."
+        )
+    elif entities.get("refund_requested") and not booking.get("is_cancelled"):
+        flight_num = booking.get("flight_number", "your flight")
+        paragraphs.append(
+            f"Regarding your inquiry about a refund: under SkyRoute service rules, full refunds are provided for airline-caused cancellations. "
+            f"Because flight {flight_num} is currently delayed rather than cancelled, the flight remains scheduled to depart, "
+            "and compensation is provided via our Delay Compensation Rule (meal voucher and lounge access)."
+        )
+
+    # Non-airline caused disruption
+    if entities.get("non_airline_caused"):
+        paragraphs.append(
+            "Regarding non-airline-caused disruptions (such as personal delays or missed flights): "
+            "under our policy, complimentary rebooking or compensation cannot be authorized without supervisor review."
+        )
 
     # 4. Closing / Escalation Banner
     if is_escalated:

@@ -73,14 +73,24 @@ def run_guardrail_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             # Note: Do not escalate merely for asking, but block full night and restrict to delayed hours
 
     # Check 5: Non-airline-caused disruption exception ask
-    if active_booking.get("is_airline_caused") is False:
+    if entities.get("non_airline_caused") or active_booking.get("is_airline_caused") is False:
         violated_rules.append("Prohibited Action: Making exceptions for non-airline-caused disruptions")
         escalation_reasons.append("Exceptions for non-airline-caused disruptions require supervisor escalation.")
+        blocked_actions.append({
+            "type": "non_airline_exception",
+            "rule": "Allowed vs Prohibited Actions",
+            "reason": "Agents cannot approve compensation or waivers for non-airline-caused disruptions."
+        })
 
     # Check 6: Refund to a different payment method
     if entities.get("refund_payment_method") == "different":
         violated_rules.append("Prohibited Action: Processing refunds to a different payment method than original")
-        escalation_reasons.append("Refunds to different payment methods are strictly prohibited and require escalation.")
+        escalation_reasons.append("Refunds to different payment methods are strictly prohibited and require supervisor escalation.")
+        blocked_actions.append({
+            "type": "refund_different_payment_method",
+            "rule": "Refund Processing Rule",
+            "reason": "Refunds can only be processed to the original payment method."
+        })
 
     # Determine which proposed entitlements are cleared
     for ent in proposed_entitlements:

@@ -136,6 +136,34 @@ def evaluate_policy_deterministic(
                 })
                 explanation_parts.append(f"Fare difference of ₹{fare_diff:,.0f} is within agent waiver authority.")
 
+    # 3. Specific Refund Request Checks (Applicable to any flight status)
+    if entities.get("refund_requested"):
+        rules_cited.append("Refund Processing Rule")
+        if entities.get("refund_payment_method") == "different":
+            requires_escalation = True
+            escalation_reason = "Customer requested refund to a different payment method than the original."
+            explanation_parts.append(
+                "Regarding your request to process a refund to a different bank account or payment method: "
+                "under SkyRoute's Refund Processing Rule, refunds can strictly be issued to the original payment method only. "
+                "Processing refunds to a different payment method is prohibited and requires supervisor escalation."
+            )
+        elif not is_cancelled:
+            explanation_parts.append(
+                f"Regarding your refund request: per SkyRoute service rules, full refunds are provided for airline-caused cancellations. "
+                f"Because your flight is currently delayed rather than cancelled, the flight remains scheduled to operate, "
+                "and disruption support is provided via our Delay Compensation Rule."
+            )
+
+    # 4. Non-airline-caused disruption check
+    if entities.get("non_airline_caused"):
+        rules_cited.append("Service Rules (Non-Airline Caused)")
+        requires_escalation = True
+        escalation_reason = "Customer requested compensation/waiver for a non-airline-caused disruption."
+        explanation_parts.append(
+            "Regarding non-airline-caused disruptions (such as personal delays): "
+            "agents are prohibited from approving compensation or fare waivers without supervisor authorization."
+        )
+
     applicable_rule = " & ".join(dict.fromkeys(rules_cited)) if rules_cited else "Service Rules"
     explanation = " ".join(explanation_parts)
 

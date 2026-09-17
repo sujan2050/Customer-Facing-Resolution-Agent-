@@ -17,7 +17,7 @@ def parse_router_deterministic(message: str) -> RouterOutput:
         entities["flight_number"] = None
 
     # Upgrade request check (e.g., Priya Nair)
-    if "upgrade" in msg_lower or "business class" in msg_lower:
+    if "upgrade" in msg_lower or "business class" in msg_lower or "first class" in msg_lower:
         entities["upgrade_requested"] = True
     else:
         entities["upgrade_requested"] = False
@@ -25,7 +25,7 @@ def parse_router_deterministic(message: str) -> RouterOutput:
     # Fare difference extraction (e.g., ₹2000, 2000, rs 2000, inr 2000)
     fare_match = re.search(r"(?:₹|rs\.?|inr)?\s*([0-9]+(?:,[0-9]+)?)\s*(?:fare|rupees|diff|difference)?", msg_lower)
     fare_diff = None
-    if "fare difference" in msg_lower or "higher-fare" in msg_lower or "different flight" in msg_lower or "higher fare" in msg_lower:
+    if "fare difference" in msg_lower or "higher-fare" in msg_lower or "different flight" in msg_lower or "higher fare" in msg_lower or "alternate flight" in msg_lower:
         num_match = re.search(r"(?:₹|rs\.?|inr)?\s*([0-9]+(?:,[0-9]+)*)", msg_lower)
         if num_match:
             try:
@@ -37,10 +37,12 @@ def parse_router_deterministic(message: str) -> RouterOutput:
                 pass
     if "2,000" in msg_lower or "2000" in msg_lower:
         fare_diff = 2000.0
+    elif "1,000" in msg_lower or "1000" in msg_lower:
+        fare_diff = 1000.0
     entities["fare_difference_amount"] = fare_diff
 
     # Hotel requested
-    if "hotel" in msg_lower or "accommodation" in msg_lower:
+    if "hotel" in msg_lower or "accommodation" in msg_lower or "room" in msg_lower or "stay" in msg_lower:
         entities["hotel_requested"] = True
         if "full night" in msg_lower or "whole night" in msg_lower or "overnight" in msg_lower:
             entities["hotel_stay_type"] = "full_night"
@@ -50,17 +52,38 @@ def parse_router_deterministic(message: str) -> RouterOutput:
         entities["hotel_requested"] = False
         entities["hotel_stay_type"] = None
 
-    # Refund requested
-    refund_requested = "refund" in msg_lower
+    # Refund requested and payment method detection
+    refund_requested = "refund" in msg_lower or "money back" in msg_lower or "cash back" in msg_lower
     entities["refund_requested"] = refund_requested
 
+    # Payment method check (different account/card vs original)
+    if any(phrase in msg_lower for phrase in [
+        "different bank", "different account", "different card", "another account",
+        "another card", "different payment", "different method", "other card", "other bank", "cash instead"
+    ]):
+        entities["refund_payment_method"] = "different"
+    elif "original" in msg_lower:
+        entities["refund_payment_method"] = "original"
+    else:
+        entities["refund_payment_method"] = None
+
     # Rebook requested
-    rebook_requested = "rebook" in msg_lower or "move me" in msg_lower or "next flight" in msg_lower or "reschedule" in msg_lower or "another flight" in msg_lower or "different flight" in msg_lower
+    rebook_requested = any(w in msg_lower for w in [
+        "rebook", "move me", "next flight", "reschedule", "another flight", "different flight", "alternate flight"
+    ])
     entities["rebook_requested"] = rebook_requested
 
     # Compensation requested
-    compensation_requested = "compensation" in msg_lower or "voucher" in msg_lower or "lounge" in msg_lower or "hotel" in msg_lower
+    compensation_requested = any(w in msg_lower for w in [
+        "compensation", "voucher", "meal voucher", "lounge", "hotel"
+    ])
     entities["compensation_requested"] = compensation_requested
+
+    # Non-airline caused disruption ask (e.g. missed flight, overslept, traffic)
+    if any(w in msg_lower for w in ["missed my flight", "missed the flight", "overslept", "woke up late", "stuck in traffic"]):
+        entities["non_airline_caused"] = True
+    else:
+        entities["non_airline_caused"] = False
 
     # Voluntary rebook (e.g. asking to be moved onto a different flight instead of waiting)
     if ("different" in msg_lower or "higher-fare" in msg_lower or "higher fare" in msg_lower) and not "cancelled" in msg_lower:
@@ -120,12 +143,14 @@ def run_router_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     - flight_number (e.g. SK-204, SK-118, SK-305)
     - rebook_requested (bool)
     - refund_requested (bool)
+    - refund_payment_method ('original', 'different', or null)
     - compensation_requested (bool)
     - upgrade_requested (bool)
     - hotel_requested (bool)
     - hotel_stay_type ('delayed_hours', 'full_night', or null)
     - fare_difference_amount (number or null)
     - voluntary_rebook (bool)
+    - non_airline_caused (bool)
     """
 
     router_output = extract_structured_data(
@@ -142,6 +167,9 @@ def run_router_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     traces = list(state.get("traces", []))
     summary_parts = [f"Intent: {router_output.intent}"]
+    if router_output.entities.get("refund_requested"):
+        method_str = router_output.entities.get("refund_payment_method") or "standard"
+        summary_parts.append(f"Refund Requested ({method_str})")
     if router_output.entities.get("upgrade_requested"):
         summary_parts.append("Requested Business Upgrade")
     if router_output.entities.get("hotel_requested"):
