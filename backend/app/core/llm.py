@@ -15,8 +15,9 @@ def get_llm():
         return None
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        # Support gemini-2.5-flash, gemini-2.0-flash, or gemini-1.5-flash
         model_name = settings.LLM_MODEL or "gemini-2.5-flash"
+        if "3.6" in model_name or "3.8" in model_name or not model_name.startswith("gemini-"):
+            model_name = "gemini-2.5-flash"
         return ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=api_key,

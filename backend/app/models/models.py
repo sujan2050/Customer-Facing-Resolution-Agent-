@@ -1,7 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from app.db.session import Base
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 class Customer(Base):
     __tablename__ = "customers"
@@ -15,14 +18,14 @@ class Customer(Base):
     travel_history = Column(Text, nullable=True)
 
     bookings = relationship("Booking", back_populates="customer", cascade="all, delete-orphan")
-    conversations = relationship("Conversation", back_populates="customer")
-    actions = relationship("ActionLedgerEntry", back_populates="customer")
+    conversations = relationship("Conversation", back_populates="customer", cascade="all, delete-orphan")
+    actions = relationship("ActionLedgerEntry", back_populates="customer", cascade="all, delete-orphan")
 
 class Booking(Base):
     __tablename__ = "bookings"
 
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     pnr = Column(String(20), index=True, nullable=False)
     flight_number = Column(String(20), nullable=False)
     route = Column(String(100), nullable=False)
@@ -46,44 +49,44 @@ class PolicyRule(Base):
     entitlement_summary = Column(Text, nullable=False)
     conditions_json = Column(JSON, nullable=True)
 
-class ActionLedgerEntry(Base):
-    __tablename__ = "action_ledger"
-
-    id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(String(64), ForeignKey("conversations.id"), nullable=True)
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
-    action_type = Column(String(50), nullable=False)  # rebooked, voucher_issued, lounge_granted, hotel_arranged, refund_initiated, escalated_to_supervisor
-    rule_cited = Column(String(100), nullable=False)
-    status = Column(String(30), default="COMPLETED")  # COMPLETED, ESCALATED, BLOCKED
-    details_json = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    customer = relationship("Customer", back_populates="actions")
-    conversation = relationship("Conversation", back_populates="actions")
-
 class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(String(64), primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     pnr = Column(String(20), nullable=False)
     status = Column(String(30), default="ACTIVE")  # ACTIVE, ESCALATED, RESOLVED
     escalation_reason = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     customer = relationship("Customer", back_populates="conversations")
     messages = relationship("MessageAudit", back_populates="conversation", cascade="all, delete-orphan")
-    actions = relationship("ActionLedgerEntry", back_populates="conversation")
+    actions = relationship("ActionLedgerEntry", back_populates="conversation", cascade="all, delete-orphan")
+
+class ActionLedgerEntry(Base):
+    __tablename__ = "action_ledger"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String(64), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    action_type = Column(String(50), nullable=False)  # rebooked, voucher_issued, lounge_granted, hotel_arranged, refund_initiated, escalated_to_supervisor
+    rule_cited = Column(String(100), nullable=False)
+    status = Column(String(30), default="COMPLETED")  # COMPLETED, ESCALATED, BLOCKED
+    details_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+
+    customer = relationship("Customer", back_populates="actions")
+    conversation = relationship("Conversation", back_populates="actions")
 
 class MessageAudit(Base):
     __tablename__ = "message_audits"
 
     id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(String(64), ForeignKey("conversations.id"), nullable=False)
+    conversation_id = Column(String(64), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     role = Column(String(20), nullable=False)  # user, assistant, system
     content = Column(Text, nullable=False)
     agent_traces_json = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     conversation = relationship("Conversation", back_populates="messages")

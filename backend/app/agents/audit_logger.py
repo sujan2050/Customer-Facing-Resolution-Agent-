@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from app.models.models import Conversation, MessageAudit
@@ -125,7 +125,8 @@ def run_audit_logger(state: Dict[str, Any]) -> Dict[str, Any]:
     close_db = state.get("db") is None
 
     try:
-        conversation_id = state.get("conversation_id", f"conv-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        now_utc = datetime.now(timezone.utc)
+        conversation_id = state.get("conversation_id", f"conv-{now_utc.strftime('%Y%m%d%H%M%S')}")
         customer_profile = state.get("customer_profile", {})
         customer_id = customer_profile.get("id", 1)
         pnr = customer_profile.get("pnr", "UNKNOWN")
@@ -145,21 +146,24 @@ def run_audit_logger(state: Dict[str, Any]) -> Dict[str, Any]:
                 customer_id=customer_id,
                 pnr=pnr,
                 status="ESCALATED" if is_escalated else "ACTIVE",
-                escalation_reason=escalation_reason
+                escalation_reason=escalation_reason,
+                created_at=now_utc,
+                updated_at=now_utc
             )
             db.add(conv)
         else:
             if is_escalated:
                 conv.status = "ESCALATED"
                 conv.escalation_reason = escalation_reason
-            conv.updated_at = datetime.utcnow()
+            conv.updated_at = now_utc
 
         # Record User Message
         user_audit = MessageAudit(
             conversation_id=conversation_id,
             role="user",
             content=user_message,
-            agent_traces_json=None
+            agent_traces_json=None,
+            created_at=now_utc
         )
         db.add(user_audit)
 
@@ -170,7 +174,7 @@ def run_audit_logger(state: Dict[str, Any]) -> Dict[str, Any]:
             "summary": f"Audit trail logged with {len(traces)} agent event(s). Status: {'ESCALATED' if is_escalated else 'ACTIVE'}",
             "details": {
                 "conversation_id": conversation_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": now_utc.isoformat(),
                 "escalated": is_escalated,
                 "escalation_reason": escalation_reason
             },

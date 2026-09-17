@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.db.session import engine, Base, SessionLocal
-from app.models.models import Customer, Booking, PolicyRule
+from app.models.models import Customer, Booking, PolicyRule, ActionLedgerEntry, Conversation, MessageAudit
 
 def seed_database(db: Session = None):
     # Ensure tables exist
@@ -18,7 +18,10 @@ def seed_database(db: Session = None):
             print("Database already seeded. Skipping...")
             return
 
-        # Clear existing data if any partial state exists
+        # Clear existing data in reverse foreign key order if any partial state exists
+        db.query(ActionLedgerEntry).delete()
+        db.query(MessageAudit).delete()
+        db.query(Conversation).delete()
         db.query(Booking).delete()
         db.query(Customer).delete()
         db.query(PolicyRule).delete()

@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
-from app.models.models import ActionLedgerEntry
+from app.models.models import ActionLedgerEntry, Conversation
 from app.db.session import SessionLocal
 
 def run_execution_agent(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -30,6 +30,20 @@ def run_execution_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     executed_records = []
     
     try:
+        # Ensure parent Conversation row exists to satisfy Foreign Key constraint
+        if conversation_id and customer_id:
+            conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+            if not conv:
+                conv = Conversation(
+                    id=conversation_id,
+                    customer_id=customer_id,
+                    pnr=customer_profile.get("pnr", "UNKNOWN"),
+                    status="ESCALATED" if is_escalation_forced else "ACTIVE",
+                    escalation_reason=escalation_reason if is_escalation_forced else None
+                )
+                db.add(conv)
+                db.commit()
+
         # Execute cleared actions
         for act in cleared_actions:
             act_type = act.get("type")

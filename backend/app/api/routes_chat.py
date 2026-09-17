@@ -1,6 +1,6 @@
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,7 +18,19 @@ def handle_chat_message(request: ChatRequest, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    conversation_id = request.conversation_id or f"conv-{customer.pnr}-{int(datetime.utcnow().timestamp())}"
+    conversation_id = request.conversation_id or f"conv-{customer.pnr}-{int(datetime.now(timezone.utc).timestamp())}"
+
+    # Ensure parent Conversation row exists to satisfy foreign key constraints
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        conv = Conversation(
+            id=conversation_id,
+            customer_id=customer.id,
+            pnr=customer.pnr,
+            status="ACTIVE"
+        )
+        db.add(conv)
+        db.commit()
 
     initial_state = {
         "customer_id": customer.id,
@@ -58,7 +70,7 @@ def handle_chat_message(request: ChatRequest, db: Session = Depends(get_db)):
             summary=t.get("summary", ""),
             details=t.get("details"),
             rule_cited=t.get("rule_cited"),
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(timezone.utc).isoformat()
         )
         for t in final_state.get("traces", [])
     ]
@@ -81,7 +93,19 @@ async def handle_chat_stream(request: ChatRequest):
         db.close()
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    conversation_id = request.conversation_id or f"conv-{customer.pnr}-{int(datetime.utcnow().timestamp())}"
+    conversation_id = request.conversation_id or f"conv-{customer.pnr}-{int(datetime.now(timezone.utc).timestamp())}"
+
+    # Ensure parent Conversation row exists before streaming starts
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        conv = Conversation(
+            id=conversation_id,
+            customer_id=customer.id,
+            pnr=customer.pnr,
+            status="ACTIVE"
+        )
+        db.add(conv)
+        db.commit()
 
     async def event_generator():
         try:
